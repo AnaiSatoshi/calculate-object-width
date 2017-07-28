@@ -1,0 +1,719 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.1" halcon_version="13.0">
+<procedure name="main">
+<interface/>
+<body>
+<c>*</c>
+<c>* 水平カメラによる姿勢認識プログラム</c>
+<c>* 2017/07/27 北九州高専　穴井</c>
+<c>*</c>
+<c>* HALCON13</c>
+<c>*</c>
+<c>* 実験者入力なし、外部HDDをさすこと。</c>
+<c>* </c>
+<c></c>
+<l>dev_update_off ()</l>
+<c>* </c>
+<l>DispRow1 := 80</l>
+<l>DispCol1 := 20</l>
+<l>DispRow2 := 130</l>
+<l>DispCol2 := 20</l>
+<c>* 認識しきい値</c>
+<l>ThreshMin_X := 0</l>
+<l>ThreshMax_X := 50</l>
+<c></c>
+<c>* 時間取得</c>
+<l>get_system_time (MSecond, Second, Minute, Hour, Day, YDay, Month, Year)</l>
+<c></c>
+<c>* ログファイルオープン</c>
+<l>open_file ('E:/AMED/ピッキング部画像/Debug/水平カメラ姿勢認識デバッグ/姿勢認識' +  Year + Month + Day + Hour + Minute + Second + '.csv', 'output', FileHandle_W)</l>
+<l>fwrite_string (FileHandle_W, '薬品番号' + ',' + '画像番号' + ',' + '薬品幅'+ ',' + '薬品角度' + '\n'  )</l>
+<c></c>
+<c></c>
+<c>* 背景画像の読み取り</c>
+<l>read_image (BackImage_X, 'E:/AMED/ピッキング部画像/0000_Background/CAM2_background.bmp')</l>
+<l>get_image_pointer1 (BackImage_X, Pointer, Type, Width, Height)</l>
+<c>* 水平カメラ 画像表示サイズ 1/4 とする</c>
+<l>dev_open_window (0, 0, Width/2, Height/2, 'black', WindowHandle)</l>
+<c>* フォント指定</c>
+<l>set_display_font (WindowHandle, 16, 'mono', 'true', 'false')</l>
+<c></c>
+<l>for nCnt := 1 to 45 by 1</l>
+<c>    </c>
+<c>    * CAM2画像をリストの持たせる</c>
+<l>    list_image_files ('E:/AMED/ピッキング部画像/CAM2/' + nCnt, 'bmp', 'recursive', ImageFiles2)</l>
+<c>    </c>
+<c>    * 薬品幅ロガー</c>
+<l>    tuple_width := 0</l>
+<c>    </c>
+<l>    for i := 1 to |ImageFiles2| by 1</l>
+<c>        </c>
+<l>        read_image (Image, ImageFiles2[i-1])</l>
+<c>        </c>
+<c>        * 認識範囲作成</c>
+<l>        gen_rectangle1 (Rectangle, 320, 140, 800, 1100)</l>
+<c>        * </c>
+<c>        * 背景との差分をとる</c>
+<l>        sub_image (Image, BackImage_X, ImageSub, 10, 128)</l>
+<c>        *</c>
+<c>        * ノズル部分のXLDデータ読み込み</c>
+<l>        read_contour_xld_dxf (Contours, 'E:/AMED/ピッキング部画像/Nozzle/X_Nozzle.dxf', [], [], DxfStatus)</l>
+<c>        * </c>
+<c>        * カラー画像を各色に分ける</c>
+<l>        decompose3 (ImageSub, R, G, B)</l>
+<c>        *</c>
+<c>        * ノズル領域を塗りつぶす</c>
+<l>        paint_xld (Contours, R, ImageResult, 255)</l>
+<c>        * </c>
+<c>        * 認識範囲設定</c>
+<l>        reduce_domain (ImageResult, Rectangle, ImageReduced)</l>
+<c>        * </c>
+<l>        threshold (ImageReduced, Region, ThreshMin_X, ThreshMax_X)</l>
+<c>        * </c>
+<c>        * 膨張</c>
+<l>        opening_circle (Region, RegionOpening, 3.5)</l>
+<l>        boundary (RegionOpening, RegionBorder, 'inner')</l>
+<c>        * </c>
+<l>        connection (Region, ConnectedRegions)</l>
+<c>        * </c>
+<c>        </c>
+<l>        select_shape_std (ConnectedRegions, SelectedRegions, 'max_area', 0)</l>
+<c>        * </c>
+<l>        dev_set_color( 'yellow' )</l>
+<l>        dev_clear_window ()</l>
+<l>        dev_display (SelectedRegions)</l>
+<l>        dump_window_image (ImageFillup, WindowHandle)</l>
+<c>        </c>
+<c>        </c>
+<c>        * 任意方向の矩形で囲む</c>
+<l>        smallest_rectangle2 (SelectedRegions, centroid_Row, centroid_Column, Phi, Length1, Length2)</l>
+<l>        gen_rectangle2 (Rectangle2, centroid_Row, centroid_Column, Phi, Length1, Length2)</l>
+<c>        </c>
+<c>        * 矩形を水平垂直にアフィン変換</c>
+<l>        hom_mat2d_identity (HomMat2DIdentity)</l>
+<l>        hom_mat2d_rotate (HomMat2DIdentity, -Phi, centroid_Row, centroid_Column, HomMat2DRotate)</l>
+<l>        affine_trans_region (SelectedRegions, RegionAffineTrans, HomMat2DRotate, 'nearest_neighbor')</l>
+<c>        </c>
+<c>        * 水平垂直方向の矩形で囲む（参照値可視化処理）</c>
+<l>        smallest_rectangle1 (RegionAffineTrans, Row1, Column1, Row2, Column2)</l>
+<l>        gen_rectangle1 (Rectangle1, Row1, Column1, Row2, Column2)</l>
+<c>        </c>
+<c>        * 薬品幅をタプルで保持</c>
+<l>        tuple_concat (tuple_width, Length1, tuple_width)</l>
+<l>    endfor</l>
+<c>    </c>
+<c>    * 薬品幅の最大値を検索</c>
+<l>    tuple_max (tuple_width, Max)</l>
+<l>    tuple_find_first (tuple_width, Max, Index)</l>
+<c>    </c>
+<l>    read_image (Image, ImageFiles2[Index-1])</l>
+<l>    write_image (Image, 'bmp', 0, 'E:/AMED/ピッキング部画像/Debug/薬品幅のデバッグ/' + nCnt + '_' + Index + '.bmp')</l>
+<c></c>
+<l>endfor</l>
+<c></c>
+<c>* ログファイルクローズ(全てのFillup)</c>
+<l>*close_file (A_FileHandle_F)</l>
+<c>* ログファイルクローズ(薬品幅)</c>
+<l>close_file (FileHandle_W)</l>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+<procedure name="DBSearch">
+<interface>
+<ic>
+<par name="InputID" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="OutputID" base_type="ctrl" dimension="0"/>
+<par name="OutputType" base_type="ctrl" dimension="0"/>
+<par name="OutputName" base_type="ctrl" dimension="0"/>
+<par name="OutputGS1" base_type="ctrl" dimension="0"/>
+<par name="OutputPDF" base_type="ctrl" dimension="0"/>
+<par name="OutputPass" base_type="ctrl" dimension="0"/>
+<par name="OutputX1" base_type="ctrl" dimension="0"/>
+<par name="OutputY1" base_type="ctrl" dimension="0"/>
+<par name="OutputX2" base_type="ctrl" dimension="0"/>
+<par name="OutputY2" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c></c>
+<c>*出力される値の初期化</c>
+<l>OutputID :=0</l>
+<l>OutputType := 0</l>
+<l>OutputName := 0</l>
+<l>OutputGS1 := 0</l>
+<l>OutputPDF := 0</l>
+<l>OutputPass := 0</l>
+<l>OutputX1 := 0</l>
+<l>OutputY1 := 0</l>
+<l>OutputX2 := 0</l>
+<l>OutputY2 := 0</l>
+<c></c>
+<c></c>
+<c>*読み取りファイルの設定</c>
+<l>open_file ('C:/Users/user/Desktop/データベース/DataBase.txt', 'input', DataBase)</l>
+<c></c>
+<c>*入力されたIDまで検索をかける</c>
+<l>while (OutputID!=InputID)</l>
+<l>    fread_string (DataBase, OutputID, IsEOF)</l>
+<l>    if (IsEOF)</l>
+<l>        break</l>
+<l>    endif</l>
+<l>endwhile</l>
+<c></c>
+<c>*順番にデータの吸出し</c>
+<l>fread_string (DataBase, OutputType, IsEOF1)</l>
+<l>fread_string (DataBase, OutputName, IsEOF2)</l>
+<l>fread_string (DataBase, OutputGS1, IsEOF3)</l>
+<l>fread_string (DataBase, OutputPDF, IsEOF4)</l>
+<l>fread_string (DataBase, OutputPass, IsEOF5)</l>
+<l>fread_string (DataBase, OutputX1, IsEOF6)</l>
+<l>fread_string (DataBase, OutputY1, IsEOF7)</l>
+<l>fread_string (DataBase, OutputX2, IsEOF8)</l>
+<l>fread_string (DataBase, OutputY2, IsEOF9)</l>
+<l>return ()</l>
+</body>
+<docu id="DBSearch">
+<parameters>
+<parameter id="InputID"/>
+<parameter id="OutputGS1"/>
+<parameter id="OutputID"/>
+<parameter id="OutputName"/>
+<parameter id="OutputPDF"/>
+<parameter id="OutputPass"/>
+<parameter id="OutputType"/>
+<parameter id="OutputX1"/>
+<parameter id="OutputX2"/>
+<parameter id="OutputY1"/>
+<parameter id="OutputY2"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="DispAns">
+<interface>
+<ic>
+<par name="Model" base_type="ctrl" dimension="0"/>
+<par name="WindowHandle" base_type="ctrl" dimension="0"/>
+<par name="DispRow1" base_type="ctrl" dimension="0"/>
+<par name="DispCol1" base_type="ctrl" dimension="0"/>
+<par name="Score" base_type="ctrl" dimension="0"/>
+<par name="DispRow2" base_type="ctrl" dimension="0"/>
+<par name="DispCol2" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>        if (Model == 1)</l>
+<l>            dev_set_color ('green')</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0001_ポリ_オペガードMA眼洗濯流液20ml.shm')</l>
+<l>        elseif (Model ==2)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0002_ポリ_アナペイン7_5mg.shm')</l>
+<l>        elseif (Model ==3)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0003_ポリ_生理食塩水20ml.shm')</l>
+<l>        elseif (Model ==4)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0004_ポリ_ポプスカイン0_25per.shm')</l>
+<l>        elseif (Model ==5)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0005_ポリ_キシロカイン1per50mg.shm')</l>
+<l>        elseif (Model ==6)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0006_シリ_シリンジオーツカ20ml.shm')</l>
+<l>        elseif (Model ==7)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0007_シリ_塩酸メピバカイン1per100mg.shm')</l>
+<l>        elseif (Model ==8)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0009_シリ_アドレナリン0_1per1mg.shm')</l>
+<l>        elseif (Model ==9)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0009_シリ_アドレナリン0_1per1mg.shm')</l>
+<l>        elseif (Model ==10)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0010_シリ_ピスコート0_5.shm')</l>
+<l>        elseif (Model ==11)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0011_バイ_PPSB_HT静注用500単位.shm')</l>
+<l>        elseif (Model ==12)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0012_バイ_ベリプラストPコンビセット5ml.shm')</l>
+<l>        elseif (Model ==13)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0013_バイ_キシロカイン1per20ml.shm')</l>
+<l>        elseif (Model ==14)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0014_バイ_ノボ硫酸プロタミン静注用100mg.shm')</l>
+<l>        elseif (Model ==15)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0015_バイ_ノボヘパリン注5千単位5ml.shm')</l>
+<l>        elseif (Model ==16)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0016_バイ_ヘパリンNa注5千単位5mlモチダ.shm')</l>
+<l>        elseif (Model ==17)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0017_バイ_エスラックス静注50mg5ml.shm')</l>
+<l>        elseif (Model ==18)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0018_バイ_ベリプラストPコンビセット塩化カルシウム液.shm')</l>
+<l>        elseif (Model ==19)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0019_バイ_ベリプラストPコンビセットアプロチニン.shm')</l>
+<l>        elseif (Model ==20)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0020_バイ_歯科用キシロカインカートリッジ.shm')</l>
+<l>        elseif (Model ==21)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0021_アン_1perプロポフォール注マルイシ20ml.shm')</l>
+<l>        elseif (Model ==22)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0022_アン_1高比重マーカイン注脊麻用0_5per20mg4ml.shm')</l>
+<l>        elseif (Model ==23)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0023_アン_ロピオン静注50mg.shm')</l>
+<l>        elseif (Model ==24)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0024_アン_ドルミカム注射液10mg.shm')</l>
+<l>        elseif (Model ==25)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0025_アン_プリンペラン注射液10mg.shm')</l>
+<l>        elseif (Model ==26)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0026_アン_ファモチジン注射液ガスター注射液20mg.shm')</l>
+<l>        elseif (Model ==27)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0027_アン_ホリゾン注射液10mg.shm')</l>
+<l>        elseif (Model ==28)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0028_アン_パパベリン塩酸塩注.shm')</l>
+<l>        elseif (Model ==29)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0029_アン_エフェドリンナガヰ注射液40mg.shm')</l>
+<l>        elseif (Model ==30)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0030_アン_レペタン注0_2mg.shm')</l>
+<l>        elseif (Model ==31)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0031_バイアルヘッド_PP無地.shm')</l>
+<l>        elseif (Model ==32)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0032_バイアルヘッド_セファゾリン1g.shm')</l>
+<l>        elseif (Model ==33)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0033_バイアルヘッド_セフメタゾール1g.shm')</l>
+<l>        elseif (Model ==34)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0034_バイアルヘッド_ドロレプタン(注)25.shm')</l>
+<l>        elseif (Model ==35)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0035_バイアルヘッド_黄B10.shm')</l>
+<l>        elseif (Model ==36)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0036_バイアルヘッド_赤無地.shm')</l>
+<l>        elseif (Model ==37)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0037_プラスチックアンプル蓋.shm')</l>
+<l>        elseif (Model ==38)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0038_注射針キャップ.shm')</l>
+<l>        elseif (Model ==39)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0039_アンプルヘッド1.shm')</l>
+<l>        elseif (Model ==40)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0040_アンプルヘッド2.shm')</l>
+<l>        elseif (Model ==41)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0041_アンプルヘッド3.shm')</l>
+<l>        elseif (Model ==42)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0042_アンプルヘッド4.shm')</l>
+<l>        elseif (Model ==43)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0043_アンプルヘッド5.shm')</l>
+<l>        elseif (Model ==44)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0044_アンプルヘッド6.shm')</l>
+<l>        elseif (Model ==45)</l>
+<l>            set_tposition (WindowHandle, DispRow1, DispCol1)</l>
+<l>            write_string (WindowHandle, 'Score:' + Score)</l>
+<l>            set_tposition (WindowHandle, DispRow2, DispCol2)</l>
+<l>            write_string (WindowHandle, 'Model:0045_アンプルヘッド7.shm')</l>
+<l>        endif</l>
+<l>return ()</l>
+</body>
+<docu id="DispAns">
+<parameters>
+<parameter id="DispCol1"/>
+<parameter id="DispCol2"/>
+<parameter id="DispRow1"/>
+<parameter id="DispRow2"/>
+<parameter id="Model"/>
+<parameter id="Score"/>
+<parameter id="WindowHandle"/>
+</parameters>
+</docu>
+</procedure>
+<procedure name="CalResult">
+<interface>
+<ic>
+<par name="FileHandle" base_type="ctrl" dimension="0"/>
+<par name="i" base_type="ctrl" dimension="0"/>
+<par name="a_Model" base_type="ctrl" dimension="0"/>
+<par name="a_Circularity" base_type="ctrl" dimension="0"/>
+<par name="a_Yaw" base_type="ctrl" dimension="0"/>
+<par name="a_Row" base_type="ctrl" dimension="0"/>
+<par name="a_Column" base_type="ctrl" dimension="0"/>
+<par name="a_Pitch" base_type="ctrl" dimension="0"/>
+<par name="a_Scale" base_type="ctrl" dimension="0"/>
+<par name="a_Score" base_type="ctrl" dimension="0"/>
+<par name="nCnt" base_type="ctrl" dimension="0"/>
+<par name="A_FileHandle" base_type="ctrl" dimension="0"/>
+</ic>
+</interface>
+<body>
+<l>Match_OK := 0 </l>
+<l>Match_Other := 0</l>
+<l>Match_NG := 0</l>
+<l>Match_Error := 0</l>
+<c></c>
+<l>* Match_OK_Yaw10 := 0 </l>
+<l>* Match_Other_Yaw10 := 0</l>
+<l>* Match_NG_Yaw10 := 0</l>
+<c></c>
+<l>* i_Yaw10 := 0</l>
+<c></c>
+<c>* 一覧の書き出し</c>
+<l>fwrite_string (FileHandle, '画像番号' + ',' + 'ModelID' + ',' + 'Circularity' + ',' + 'Yaw' + ',' + 'Row' + ',' + 'Column' + ',' + 'Pitch' + ',' + 'Scale' + ',' + 'Score' +  '\n')</l>
+<l>for Index := 1 to i-1 by 1</l>
+<l>    fwrite_string (FileHandle, Index + ',' + a_Model[Index] + ',' + a_Circularity[Index] + ',' + a_Yaw[Index] + ',' + a_Row[Index] + ',' + a_Column[Index] + ',' + a_Pitch[Index] + ',' + a_Scale[Index] + ',' + a_Score[Index] + '\n')</l>
+<c>    </c>
+<l>    if (a_Model[Index] == nCnt-1)</l>
+<l>        tuple_concat (Match_OK, a_Model[Index], Match_OK)</l>
+<l>    endif</l>
+<c>    </c>
+<l>*     if (a_Model[Index] &gt;= 30)</l>
+<l>*         if (a_Model[Index] &lt;= 45)</l>
+<l>*             tuple_concat (Match_NG, a_Model[Index], Match_NG)</l>
+<l>*         endif</l>
+<l>*     endif</l>
+<c>    </c>
+<l>    if (a_Model[Index] == 99999999)</l>
+<l>        tuple_concat (Match_Error, a_Model[Index], Match_Error)</l>
+<l>    endif</l>
+<c>    </c>
+<l>    if (a_Model[Index] != nCnt-1)</l>
+<l>        if (a_Model[Index] &gt;= 0)</l>
+<l>            if (a_Model[Index] &lt;= 29)</l>
+<l>                tuple_concat (Match_Other, a_Model[Index], Match_Other)</l>
+<l>            endif</l>
+<l>        endif</l>
+<l>    endif</l>
+<c>    </c>
+<l>*     if (abs(a_Yaw[Index]) &lt;= 10)</l>
+<c>        </c>
+<l>*         tuple_concat (i_Yaw10, a_Model[Index], i_Yaw10)</l>
+<c>        </c>
+<l>*         if (a_Model[Index] == nCnt-1)</l>
+<l>*             tuple_concat (Match_OK_Yaw10, a_Model[Index], Match_OK_Yaw10)</l>
+<l>*         endif</l>
+<c>    </c>
+<l>*         if (a_Model[Index] == 12)</l>
+<l>*             tuple_concat (Match_NG_Yaw10, a_Model[Index], Match_NG_Yaw10)</l>
+<l>*         endif</l>
+<c>        </c>
+<l>*         if (a_Model[Index] != nCnt-1)</l>
+<l>*             if (a_Model[Index] != 12)</l>
+<l>*                 if (a_Model[Index] != '')</l>
+<l>*                     tuple_concat (Match_Other_Yaw10, a_Model[Index], Match_Other_Yaw10)</l>
+<l>*                 endif</l>
+<l>*             endif</l>
+<l>*         endif</l>
+<c>    </c>
+<l>*     endif</l>
+<c>    </c>
+<l>endfor</l>
+<c></c>
+<l>fwrite_string (FileHandle, '\n')</l>
+<l>tuple_length (Match_OK, Match_OK_Length)</l>
+<l>tuple_length (Match_Other, Match_Other_Length)</l>
+<l>tuple_length (Match_NG, Match_NG_Length)</l>
+<l>tuple_length (Match_Error, Match_Error_Length)</l>
+<c></c>
+<l>* tuple_length (i_Yaw10, i_Yaw10_Length)</l>
+<l>* tuple_length (Match_OK_Yaw10, Match_OK_Yaw10_Length)</l>
+<l>* tuple_length (Match_Other_Yaw10, Match_Other_Yaw10_Length)</l>
+<l>* tuple_length (Match_NG_Yaw10, Match_NG_Yaw10_Length)</l>
+<c></c>
+<l>Match_OK_Length := Match_OK_Length - 1</l>
+<l>Match_Other_Length := Match_Other_Length - 1</l>
+<l>Match_NG_Length := Match_NG_Length - 1</l>
+<l>Match_Error_Length := Match_Error_Length - 1</l>
+<l>Match_Anything := Match_OK_Length + Match_Other_Length</l>
+<l>* i_Yaw10_Length := i_Yaw10_Length - 1</l>
+<l>* Match_OK_Yaw10_Length := Match_OK_Yaw10_Length - 1</l>
+<l>* Match_Other_Yaw10_Length := Match_Other_Yaw10_Length - 1</l>
+<l>* Match_NG_Yaw10_Length := Match_NG_Yaw10_Length - 1</l>
+<c></c>
+<l>* Matching_Error := i - 1 - Match_OK_Length - Match_Other_Length - Match_NG_Length</l>
+<l>* Matching_Error_Yaw10 := i_Yaw10_Length - Match_OK_Yaw10_Length - Match_Other_Yaw10_Length - Match_NG_Yaw10_Length</l>
+<c></c>
+<l>Match_OK_p := 100 * Match_OK_Length / (i-1)</l>
+<l>Match_Other_p := 100 * Match_Other_Length / (i-1)</l>
+<l>Match_NG_p := 100 * Match_NG_Length / (i-1)</l>
+<l>Match_Error_p := 100 * Match_Error_Length / (i-1)</l>
+<l>Match_Anything_p :=100 * Match_Anything / (i - 1)</l>
+<l>* Match_OK_Yaw10_p := 100 * Match_OK_Yaw10_Length / i_Yaw10_Length</l>
+<l>* Match_Other_Yaw10_p := 100 * Match_Other_Yaw10_Length / i_Yaw10_Length</l>
+<l>* Match_NG_Yaw10_p := 100 * Match_NG_Yaw10_Length / i_Yaw10_Length</l>
+<l>* Matching_Error_Yaw10_p := 100 * Matching_Error_Yaw10 / i_Yaw10_Length</l>
+<c></c>
+<l>fwrite_string (FileHandle, '一致' + ',' + Match_OK_Length + ',' + '回' + '\n')</l>
+<l>fwrite_string (FileHandle, '一致率' + ',' + Match_OK_p + ',' + '%' + '\n')</l>
+<l>fwrite_string (FileHandle, '他薬品と一致' + ',' + Match_Other_Length + ',' + '回' + '\n')</l>
+<l>fwrite_string (FileHandle, '他薬品と一致率' + ',' + Match_Other_p + ',' + '%' + '\n')</l>
+<l>fwrite_string (FileHandle, '異物' + ',' + Match_NG_Length + ',' + '回' + '\n')</l>
+<l>fwrite_string (FileHandle, '異物率' + ',' + Match_NG_p + ',' + '%' + '\n')</l>
+<l>fwrite_string (FileHandle, 'マッチング失敗' + ',' + Match_Error_Length + ',' + '回' + '\n')</l>
+<l>fwrite_string (FileHandle, 'マッチング失敗率' + ',' + Match_Error_p + ',' + '%' + '\n')</l>
+<l>fwrite_string (FileHandle, '\n')</l>
+<c></c>
+<l>* fwrite_string (FileHandle, 'ピッチが10度以下の場合' + '\n')</l>
+<l>* fwrite_string (FileHandle, '一致' + ',' + Match_OK_Yaw10_Length + ',' + '回' + '\n')</l>
+<l>* fwrite_string (FileHandle, '一致率' + ',' + Match_OK_Yaw10_p + ',' + '%' + '\n')</l>
+<l>* fwrite_string (FileHandle, '他薬品と一致' + ',' + Match_Other_Yaw10_Length + ',' + '回' + '\n')</l>
+<l>* fwrite_string (FileHandle, '他薬品と一致率' + ',' + Match_Other_Yaw10_p + ',' + '%' + '\n')</l>
+<l>* fwrite_string (FileHandle, '異物' + ',' + Match_NG_Yaw10_Length + ',' + '回' + '\n')</l>
+<l>* fwrite_string (FileHandle, '異物率' + ',' + Match_NG_Yaw10_p + ',' + '%' + '\n')</l>
+<l>* fwrite_string (FileHandle, 'マッチング失敗' + ',' + Matching_Error_Yaw10 + ',' + '回' + '\n')</l>
+<l>* fwrite_string (FileHandle, 'マッチング失敗率' + ',' + Matching_Error_Yaw10_p + ',' + '%' + '\n\n')</l>
+<c></c>
+<c>* 薬品認識率一覧表書きだし</c>
+<l>fwrite_string (A_FileHandle, nCnt + ',' + Match_OK_Length + ',' + Match_OK_p + ',' + Match_Other_Length + ',' + Match_Other_p + ',' + Match_Anything_p + '\n')</l>
+<c></c>
+<l>return ()</l>
+</body>
+<docu id="CalResult">
+<parameters>
+<parameter id="A_FileHandle">
+<description lang="ja_JP">すべての薬品のデータログファイルハンドル</description>
+</parameter>
+<parameter id="FileHandle">
+<description lang="ja_JP">薬品ｎCnt のデータログファイルハンドル</description>
+</parameter>
+<parameter id="a_Circularity">
+<description lang="ja_JP">画像iの真円度</description>
+</parameter>
+<parameter id="a_Column">
+<description lang="ja_JP">画像i にa_model のモデルファイルをフィッティングさせた時のモデルファイルの重心の列座標</description>
+</parameter>
+<parameter id="a_Model">
+<description lang="ja_JP">i番目の画像に対して最もスコアの高かったモデルファイルのインデックス</description>
+</parameter>
+<parameter id="a_Pitch">
+<description lang="ja_JP">画像i にa_model のモデルファイルをフィッティングさせた時のモデルファイルのピッチ角</description>
+</parameter>
+<parameter id="a_Row">
+<description lang="ja_JP">画像i にa_model のモデルファイルをフィッティングさせた時のモデルファイルの重心の行座標</description>
+</parameter>
+<parameter id="a_Scale">
+<description lang="ja_JP">画像i にa_model のモデルファイルをフィッティングさせた時のモデルファイルのスケール係数</description>
+</parameter>
+<parameter id="a_Score">
+<description lang="ja_JP">画像i にa_model のモデルファイルをフィッティングさせた時のスコア値
+</description>
+</parameter>
+<parameter id="a_Yaw">
+<description lang="ja_JP">画像iのヨー角
+</description>
+</parameter>
+<parameter id="i">
+<description lang="ja_JP">実験対象の薬品の画像リストのインデックス</description>
+</parameter>
+<parameter id="nCnt">
+<description lang="ja_JP">実験対象薬品の薬品番号</description>
+</parameter>
+</parameters>
+</docu>
+</procedure>
+<procedure name="PosTop">
+<interface>
+<io>
+<par name="Image" base_type="iconic" dimension="0"/>
+<par name="BackImage" base_type="iconic" dimension="0"/>
+</io>
+<ic>
+<par name="Height" base_type="ctrl" dimension="0"/>
+<par name="Width" base_type="ctrl" dimension="0"/>
+<par name="ThreshMin" base_type="ctrl" dimension="0"/>
+<par name="ThreshMax" base_type="ctrl" dimension="0"/>
+<par name="Min_Area" base_type="ctrl" dimension="0"/>
+<par name="WindowHandle" base_type="ctrl" dimension="0"/>
+</ic>
+<oc>
+<par name="Circularity" base_type="ctrl" dimension="0"/>
+<par name="Yaw" base_type="ctrl" dimension="0"/>
+</oc>
+</interface>
+<body>
+<c>        * 認識範囲作成</c>
+<l>    gen_rectangle1 (Rectangle, 70, 100, Height-100, Width-100)</l>
+<c>    * </c>
+<c>    * 背景との差分をとる</c>
+<l>    sub_image (Image, BackImage, ImageSub, 10, 128)</l>
+<c>    *</c>
+<c>    * ノズル部分のXLDデータ読み込み</c>
+<l>    read_contour_xld_dxf (Contours, 'E:/AMED/ピッキング部画像/Nozzle/T_Nozzle.dxf', [], [], DxfStatus)</l>
+<c>    * </c>
+<c>    * カラー画像を各色に分ける</c>
+<l>    decompose3 (ImageSub, R, G, B)</l>
+<c>    *</c>
+<c>    * ノズル領域を塗りつぶす</c>
+<l>    paint_xld (Contours, R, ImageResult, 10)</l>
+<c>    * </c>
+<c>    * 認識範囲設定</c>
+<l>    reduce_domain (ImageResult, Rectangle, ImageReduced)</l>
+<c>    * </c>
+<l>    threshold (ImageReduced, Region, ThreshMin, ThreshMax)</l>
+<c>    * </c>
+<c>    * 円フィッティング</c>
+<l>    opening_circle (Region, RegionOpening, 3.5)</l>
+<l>    boundary (RegionOpening, RegionBorder, 'inner')</l>
+<l>    circularity (RegionOpening, Circularity)</l>
+<c>    * </c>
+<l>    connection (Region, ConnectedRegions)</l>
+<c>    * </c>
+<l>    select_shape (ConnectedRegions, SelectedRegions, 'area', 'and', Min_Area, 999999)</l>
+<l>    * select_shape_std (ConnectedRegions, SelectedRegions, 'max_area', 70)</l>
+<c>    * </c>
+<l>    union1 (SelectedRegions, RegionUnion)</l>
+<c>    * </c>
+<l>    smallest_rectangle2 (RegionUnion, Row, Column, Phi, Length1, Length2)</l>
+<c>    * </c>
+<c>    </c>
+<l>    if (Row &gt;= 0)</l>
+<l>        gen_rectangle2 (Rectangle1, Row, Column, Phi, Length1, Length2)</l>
+<l>    else</l>
+<l>        Row := 99999999</l>
+<l>        Column := 99999999</l>
+<l>        Phi := 99999999</l>
+<l>        Length1 := 99999999</l>
+<l>        Length2 := 99999999</l>
+<l>    endif</l>
+<c>    * </c>
+<l>    dev_set_color ('yellow')</l>
+<c>    * </c>
+<l>    set_tposition (WindowHandle, 130, 5)</l>
+<l>    write_string (WindowHandle, 'Angle:'+Phi*180./3.14)</l>
+<c>    * </c>
+<l>    Yaw := Phi*180./3.14</l>
+<l>return ()</l>
+</body>
+<docu id="PosTop">
+<parameters>
+<parameter id="BackImage"/>
+<parameter id="Circularity"/>
+<parameter id="Height"/>
+<parameter id="Image"/>
+<parameter id="Min_Area"/>
+<parameter id="ThreshMax"/>
+<parameter id="ThreshMin"/>
+<parameter id="Width"/>
+<parameter id="WindowHandle"/>
+<parameter id="Yaw"/>
+</parameters>
+</docu>
+</procedure>
+</hdevelop>
